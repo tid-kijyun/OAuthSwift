@@ -10,6 +10,7 @@ import OAuthSwift
 
 #if os(iOS)
     import UIKit
+    import SafariServices
 #elseif os(OSX)
     import AppKit
 #endif
@@ -76,7 +77,7 @@ extension ViewController {
         // Ask to user by showing form from storyboards
         self.formData.data = nil
         Queue.main.async { [unowned self] in
-            self.performSegue(withIdentifier: Storyboards.Main.FormSegue, sender: self)
+            self.performSegue(withIdentifier: Storyboards.Main.formSegue, sender: self)
             // see prepare for segue
         }
         // Wait for result
@@ -99,6 +100,8 @@ extension ViewController {
         parameters["name"] = service
 
         switch service {
+        case "Imgur" :
+            doOAuthImgur(parameters)
         case "500px" :
             doOAuth500px(parameters)
         case "Spotify" :
@@ -161,8 +164,14 @@ extension ViewController {
             doOAuthTypetalk(parameters)
         case "SoundCloud":
             doOAuthSoundCloud(parameters)
-        case "Wordpress" :
+        case "Wordpress":
             doOAuthWordpress(parameters)
+        case "Digu":
+            doOAuthDigu(parameters)
+        case "Noun":
+            doOAuthNoun(parameters)
+        case "Lyft":
+            doOAuthLyft(parameters)
         default:
             print("\(service) not implemented")
         }
@@ -216,7 +225,35 @@ extension ViewController {
             }
         )
     }
-    
+
+    // MARK: Imgur
+    func doOAuthImgur(_ serviceParameters: [String:String]){
+        let oauthswift = OAuth2Swift(
+            consumerKey:    serviceParameters["consumerKey"]!,
+            consumerSecret: serviceParameters["consumerSecret"]!,
+            authorizeUrl:   "https://api.imgur.com/oauth2/authorize",
+            accessTokenUrl: "https://api.imgur.com/oauth2/token",
+            responseType:   "token"
+        )
+        self.oauthswift = oauthswift
+        oauthswift.encodeCallbackURL = true
+        oauthswift.encodeCallbackURLQuery = false
+        oauthswift.authorizeURLHandler = getURLHandler()
+        let state = generateState(withLength: 20)
+
+        let _ = oauthswift.authorize(
+            withCallbackURL: URL(string: "oauth-swift://oauth-callback/imgur")!,
+            scope: "",
+            state: state,
+            success: { credential, response, parameters in
+                self.showTokenAlert(name: serviceParameters["name"], credential: credential)
+            },
+            failure: { error in
+                print(error.description)
+            }
+        )
+    }
+
     // MARK: Twitter
     func doOAuthTwitter(_ serviceParameters: [String:String]){
         let oauthswift = OAuth1Swift(
@@ -244,7 +281,7 @@ extension ViewController {
             "https://api.twitter.com/1.1/statuses/mentions_timeline.json", parameters: [:],
             success: { response in
                 let jsonDict = try? response.jsonObject()
-                print(jsonDict as Any)
+                print(String(describing: jsonDict))
             }, failure: { error in
                 print(error)
             }
@@ -712,6 +749,7 @@ extension ViewController {
         // For googgle the redirect_uri should match your this syntax: your.bundle.id:/oauth2Callback
         self.oauthswift = oauthswift
         oauthswift.authorizeURLHandler = getURLHandler()
+        oauthswift.allowMissingStateCheck = true
         // in plist define a url schem with: your.bundle.id:
         let _ = oauthswift.authorize(
             withCallbackURL: URL(string: "https://oauthswift.herokuapp.com/callback/google")!, scope: "https://www.googleapis.com/auth/drive", state: "",
@@ -723,7 +761,7 @@ extension ViewController {
                     "https://www.googleapis.com/upload/drive/v2/files", parameters: parameters, image: self.snapshot(),
                     success: { response in
                         let jsonDict = try? response.jsonObject()
-                        print("SUCCESS: \(jsonDict)")
+                        print("SUCCESS: \(String(describing: jsonDict))")
                     },
                     failure: { error in
                         print(error)
@@ -1206,6 +1244,7 @@ extension ViewController {
         )
     }
     
+    // MARK: Wordpress
     func doOAuthWordpress(_ serviceParameters: [String:String]) {
         let wordpressURL = serviceParameters["url"] ?? "http://localhost/wordpress"
         let oauthswift = OAuth1Swift(
@@ -1231,6 +1270,77 @@ extension ViewController {
             }
         )
 
+    }
+
+    // MARK: Digu
+    func doOAuthDigu(_ serviceParameters: [String:String]){
+        let oauthswift = OAuth2Swift(
+            consumerKey:    serviceParameters["consumerKey"]!,
+            consumerSecret: serviceParameters["consumerSecret"]!,
+            authorizeUrl:   "https://digu.io/login/oauth/authorize",
+            accessTokenUrl: "https://digu.io/login/oauth/access_token",
+            responseType:   "code"
+        )
+        self.oauthswift = oauthswift
+        oauthswift.authorizeURLHandler = getURLHandler()
+        let state = generateState(withLength: 20)
+        let _ = oauthswift.authorize(
+            withCallbackURL: URL(string: "oauth-swift://oauth-callback/digu")!, scope: "user,news,statuses", state: state,
+            success: { credential, response, parameters in
+                self.showTokenAlert(name: serviceParameters["name"], credential: credential)
+            },
+                failure: { error in
+                    print(error.description)
+            }
+        )
+    }
+
+    // MARK: Noun
+    func doOAuthNoun(_ serviceParameters: [String:String]) {
+        let oauthswift = OAuth1Swift(
+            consumerKey:        serviceParameters["consumerKey"]!,
+            consumerSecret:     serviceParameters["consumerSecret"]!,
+            requestTokenUrl:    "",
+            authorizeUrl:       "",
+            accessTokenUrl: ""
+        )
+        self.oauthswift = oauthswift
+        
+        self.testNoun(oauthswift)
+    }
+
+    func testNoun(_ oauthswift: OAuth1Swift) {
+        let _ = oauthswift.client.get("http://api.thenounproject.com/icon/apple",
+           success: { response in
+             let dataJSON = try? response.jsonObject()
+            print(String(describing: dataJSON))
+        }, failure: { error in
+            print(error)
+        })
+    }
+
+    // MARK: Lyft
+    func doOAuthLyft(_ serviceParameters: [String:String]){
+        let oauthswift = OAuth2Swift(
+            consumerKey:    serviceParameters["consumerKey"]!,
+            consumerSecret: serviceParameters["consumerSecret"]!,
+            authorizeUrl:   "https://api.lyft.com/oauth/authorize",
+            accessTokenUrl: "https://api.lyft.com/oauth/token",
+            responseType:   "code",
+            contentType:    "application/json"
+        )
+        self.oauthswift = oauthswift
+        oauthswift.authorizeURLHandler = getURLHandler()
+        let state = generateState(withLength: 20)
+        let _ = oauthswift.authorize(
+            withCallbackURL: URL(string: "oauth-swift://oauth-callback/lift")!, scope: "rides.read", state: state,
+            success: { credential, response, parameters in
+                self.showTokenAlert(name: serviceParameters["name"], credential: credential)
+        },
+            failure: { error in
+                print(error.description)
+        }
+        )
     }
 }
 
@@ -1312,6 +1422,7 @@ extension ViewController {
         services["Tumblr"] = Tumblr
         services["Slack"] = Slack
         services["Uber"] = Uber
+        services["Digu"] = Digu
     }
     
     func snapshot() -> Data {
@@ -1380,6 +1491,15 @@ extension ViewController {
                     handler.dismissCompletion = {
                         print("Safari dismissed")
                     }
+                    handler.factory = { url in
+                        let controller = SFSafariViewController(url: url)
+                        // Customize it, for instance
+                        if #available(iOS 10.0, *) {
+                           //  controller.preferredBarTintColor = UIColor.red
+                        }
+                        return controller
+                    }
+                    
                     return handler
                 }
             #endif
@@ -1406,7 +1526,7 @@ extension ViewController {
     
     
     override func prepare(for segue: OAuthStoryboardSegue, sender: Any?) {
-        if segue.identifier == Storyboards.Main.FormSegue {
+        if segue.identifier == Storyboards.Main.formSegue {
             #if os(OSX)
                 let controller = segue.destinationController as? FormViewController
             #else

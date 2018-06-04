@@ -10,9 +10,12 @@ import Foundation
 
 open class OAuth1Swift: OAuthSwift {
 
-    // If your oauth provider doesn't provide `oauth_verifier`
-    // set this value to true (default: false)
+    /// If your oauth provider doesn't provide `oauth_verifier`
+    /// set this value to true (default: false)
     open var allowMissingOAuthVerifier: Bool = false
+
+    /// Optionally add callback URL to authorize Url (default: false)
+    open var addCallbackURLToAuthorizeURL: Bool = false
 
     var consumerKey: String
     var consumerSecret: String
@@ -31,12 +34,16 @@ open class OAuth1Swift: OAuthSwift {
         self.client.credential.version = .oauth1
     }
 
+    public convenience override init(consumerKey: String, consumerSecret: String) {
+        self.init(consumerKey: consumerKey, consumerSecret: consumerSecret, requestTokenUrl: "", authorizeUrl: "", accessTokenUrl: "")
+    }
+
     public convenience init?(parameters: ConfigParameters) {
         guard let consumerKey = parameters["consumerKey"], let consumerSecret = parameters["consumerSecret"],
             let requestTokenUrl = parameters["requestTokenUrl"], let authorizeUrl = parameters["authorizeUrl"], let accessTokenUrl = parameters["accessTokenUrl"] else {
             return nil
         }
-        self.init(consumerKey:consumerKey, consumerSecret: consumerSecret,
+        self.init(consumerKey: consumerKey, consumerSecret: consumerSecret,
           requestTokenUrl: requestTokenUrl,
           authorizeUrl: authorizeUrl,
           accessTokenUrl: accessTokenUrl)
@@ -72,7 +79,7 @@ open class OAuth1Swift: OAuthSwift {
                     responseParameters["oauth_token"] = token
                 }
 
-                if let token = responseParameters["oauth_token"] {
+                if let token = responseParameters["oauth_token"], !token.isEmpty {
                     this.client.credential.oauthToken = token.safeStringByRemovingPercentEncoding
                     if let oauth_verifier = responseParameters["oauth_verifier"] {
                         this.client.credential.oauthVerifier = oauth_verifier.safeStringByRemovingPercentEncoding
@@ -89,12 +96,21 @@ open class OAuth1Swift: OAuthSwift {
                 }
             }
             // 2. Authorize
-            let urlString = self.authorizeUrl + (self.authorizeUrl.contains("?") ? "&" : "?")
-            if let token = credential.oauthToken.urlQueryEncoded, let queryURL = URL(string: urlString + "oauth_token=\(token)") {
-                self.authorizeURLHandler.handle(queryURL)
+            if let token = credential.oauthToken.urlQueryEncoded {
+                var urlString = self.authorizeUrl + (self.authorizeUrl.contains("?") ? "&" : "?")
+                urlString += "oauth_token=\(token)"
+                if self.addCallbackURLToAuthorizeURL {
+                    urlString += "&oauth_callback=\(callbackURL.absoluteString)"
+                }
+                if let queryURL = URL(string: urlString) {
+                    self.authorizeURLHandler.handle(queryURL)
+                } else {
+                    failure?(OAuthSwiftError.encodingError(urlString: urlString))
+                }
             } else {
-                failure?(OAuthSwiftError.encodingError(urlString: urlString))
+                failure?(OAuthSwiftError.encodingError(urlString: credential.oauthToken)) //TODO specific error
             }
+
         }, failure: failure)
 
         return self

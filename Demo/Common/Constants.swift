@@ -108,3 +108,13 @@ let Uber =
     "consumerKey": "",
     "consumerSecret": ""
 ]
+let Digu =
+[
+    "consumerKey": "",
+    "consumerSecret": ""
+]
+let Imgur =
+[
+    "consumerKey": "",
+    "consumerSecret": ""
+]
